@@ -24,11 +24,12 @@ class s3:
 		public = kwargs.get('public', False)
 		force = kwargs.get('force', False)
 		debug = kwargs.get('debug', False)
-		purge = kwargs.get('purge', False)
-
+                prefix = kwargs.get('prefix', None)
+                
 		logging.info('backup %s to AWS S3 bucket %s' % (directory, bucket_name))
 		logging.info('public:%s force:%s debug: %s' % (public, force, debug))
-
+		logging.info('prefix:%s' % prefix)
+                
 		# sudo put me in another method...
 
 		bucket = None
@@ -61,15 +62,6 @@ class s3:
 
 		#
 
-		if not debug and purge:
-			logging.info('purge all keys from %s' % bucket_name)
-
-			for key in bucket.list():
-				logging.info('purging %s' % key.name)
-				key.delete()
-
-		#
-
 		counter = 0
 
 		for root, dirs, files in os.walk(directory):
@@ -78,21 +70,21 @@ class s3:
 				fullpath = os.path.join(root, f)
 				shortpath = fullpath.replace(directory, '').lstrip('/')
 
-				uri = "%s/%s" % (bucket_name, shortpath)
-
-				# logging.info('file: %s' % fullpath)                                
-				# logging.info('uri: %s' % uri)
+                                if prefix:
+                                        shortpath = '%s/%s' % (prefix, shortpath)
+                                        
+				aws_path = "/%s/%s" % (bucket_name, shortpath)
+				aws_url = 'http://s3.amazonaws.com/%s' % aws_path
 
 				if debug:
+					logging.info('fullpath: %s' % fullpath)                                
+					logging.info('shortpath: %s' % shortpath)
+					logging.info('aws url: %s' % aws_url)                                        
 					continue
 
 				try:
 
 					# sudo put me in another method...
-
-					aws_path = "/%s/%s" % (bucket_name, shortpath)
-					aws_url = 'http://s3.amazonaws.com/%s' % aws_path
-
 					# sudo store/check this stuff in a sqlite database...
 
 					if not force:
@@ -115,7 +107,7 @@ class s3:
 					counter += 1
 
 				except Exception, e:
-					logging.error("failed to fetch/store %s (url) :%s" % (fullpath, aws_url, e))
+					logging.error("failed to fetch/store %s (%s) :%s" % (fullpath, aws_url, e))
 
 		return counter
 
@@ -131,16 +123,18 @@ if __name__ == '__main__':
 	parser.add_option('-D', '--directory', dest='directory', action='store')
 	parser.add_option('-B', '--bucket', dest='bucket', action='store')
 	parser.add_option('-P', '--public', dest='public', action='store_true', default=False)
+
 	parser.add_option('-f', '--force', dest='force', action='store_true', default=False)
 	parser.add_option('-d', '--debug', dest='debug', action='store_true', default=False)
-
+	parser.add_option('-p', '--prefix', dest='prefix', action='store', default=None)
+        
 	options, args = parser.parse_args()
 
 	cfg = ConfigParser.ConfigParser()
 	cfg.read(options.config)
 
 	s = s3(cfg)
-	c = s.backup(options.directory, options.bucket, public=options.public, force=options.force, debug=options.debug)
+	c = s.backup(options.directory, options.bucket, public=options.public, force=options.force, debug=options.debug, prefix=options.prefix)
 
 	logging.info('backup completed, %s new files stored' % c)
 	sys.exit()
