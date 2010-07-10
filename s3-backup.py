@@ -53,6 +53,7 @@ class s3:
 
 		except Exception, e:
 			logging.error('failed to get on with AWS: %s' % e)
+
 			if debug:
 				logging.info('debugging is enabled, so carrying on anyway...')
 			else:
@@ -77,10 +78,10 @@ class s3:
 				fullpath = os.path.join(root, f)
 				shortpath = fullpath.replace(directory, '').lstrip('/')
 
-				logging.info('file: %s' % fullpath)
-
 				uri = "%s/%s" % (bucket_name, shortpath)
-				logging.info('uri: %s' % uri)
+
+				# logging.info('file: %s' % fullpath)                                
+				# logging.info('uri: %s' % uri)
 
 				if debug:
 					continue
@@ -114,7 +115,7 @@ class s3:
 					counter += 1
 
 				except Exception, e:
-					logging.error("[%s] failed to fetch/store %s :%s" % (counter, uri, e))
+					logging.error("failed to fetch/store %s (url) :%s" % (fullpath, aws_url, e))
 
 		return counter
 
