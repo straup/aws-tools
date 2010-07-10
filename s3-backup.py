@@ -73,7 +73,7 @@ class s3:
                                 if prefix:
                                         shortpath = '%s/%s' % (prefix, shortpath)
                                         
-				aws_path = "/%s/%s" % (bucket_name, shortpath)
+				aws_path = "%s/%s" % (bucket_name, shortpath)
 				aws_url = 'http://s3.amazonaws.com/%s' % aws_path
 
 				if debug:
