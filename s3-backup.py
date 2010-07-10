@@ -101,7 +101,7 @@ class s3:
 						rsp = http_conn.getresponse()
 
 						if rsp.status == 200 :
-							logging.info("[%s] %s already stored" % (counter, uri))
+							logging.info("%s has already been stored" % aws_url)
 							continue
 
 						k = Key(bucket)
