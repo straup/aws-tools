@@ -6,6 +6,7 @@ import os
 import os.path
 import httplib
 import logging
+import time
 
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
@@ -19,17 +20,11 @@ class s3:
 		self.cfg = cfg
 		self.conn = None
 
-	def backup(self, directory, bucket_name, **kwargs):
+	def backup(self, options):
 
-		public = kwargs.get('public', False)
-		force = kwargs.get('force', False)
-		debug = kwargs.get('debug', False)
-                prefix = kwargs.get('prefix', None)
-                
-		logging.info('backup %s to AWS S3 bucket %s' % (directory, bucket_name))
-		logging.info('public:%s force:%s debug: %s' % (public, force, debug))
-		logging.info('prefix:%s' % prefix)
-                
+		for p in ('directory', 'bucket', 'public', 'prefix', 'modified', 'force', 'debug'):
+			logging.info('%s: %s' % (p, getattr(options, p)))
+
 		# sudo put me in another method...
 
 		bucket = None
@@ -45,12 +40,12 @@ class s3:
 
 			for b in self.conn.get_all_buckets():
 
-				if b.name == bucket_name:
+				if b.name == options.bucket:
 					bucket = b
 					break
 
 			if not bucket:
-				bucket = self.conn.create_bucket(bucket_name)
+				bucket = self.conn.create_bucket(options.bucket)
 
 		except Exception, e:
 			logging.error('failed to get on with AWS: %s' % e)
@@ -64,19 +59,19 @@ class s3:
 
 		counter = 0
 
-		for root, dirs, files in os.walk(directory):
+		for root, dirs, files in os.walk(options.directory):
 			for f in files:
 
 				fullpath = os.path.join(root, f)
-				shortpath = fullpath.replace(directory, '').lstrip('/')
+				shortpath = fullpath.replace(options.directory, '').lstrip('/')
 
-                                if prefix:
-                                        shortpath = '%s/%s' % (prefix, shortpath)
+                                if options.prefix:
+                                        shortpath = '%s/%s' % (options.prefix, shortpath)
                                         
-				aws_path = "%s/%s" % (bucket_name, shortpath)
+				aws_path = "%s/%s" % (options.bucket, shortpath)
 				aws_url = 'http://s3.amazonaws.com/%s' % aws_path
 
-				if debug:
+				if options.debug:
 					logging.info('fullpath: %s' % fullpath)                                
 					logging.info('shortpath: %s' % shortpath)
 					logging.info('aws url: %s' % aws_url)                                        
@@ -87,22 +82,39 @@ class s3:
 					# sudo put me in another method...
 					# sudo store/check this stuff in a sqlite database...
 
-					if not force:
+					if not options.force:
+
 						http_conn = httplib.HTTPConnection("s3.amazonaws.com")
+						# http_conn.set_debuglevel(3)
+
 						http_conn.request("HEAD", aws_url)
 						rsp = http_conn.getresponse()
-
-						# logging.info('HEAD: %s' % rsp.status)
                                                         
-						if rsp.status == 200 :
-							logging.info("%s has already been stored" % aws_url)
-							continue
+						if rsp.status == 200:
+
+							if not options.modified:
+								logging.info("%s has already been stored" % aws_url)
+								continue
+
+							last_modified = rsp.getheader('last-modified')
+
+							# Last-Modified: Sun, 11 Jul 2010 15:42:30 GMT
+							format = "%a, %d %b %Y %H:%M:%S GMT"
+
+							aws_t = int(time.mktime(time.strptime(last_modified, format)))
+							local_t = os.path.getmtime(fullpath)
+
+							logging.info("last modified local:%s remote:%s" % (local_t, aws_t))
+
+							if local_t <= aws_t:
+								logging.info("%s not modified, skipping" % fullpath)
+								continue
 
 						k = Key(bucket)
 						k.key = shortpath
 						k.set_contents_from_filename(fullpath)
 
-					if public:
+					if options.public:
 						k.set_acl('public-read')
 
 					logging.info("%s stored at %s" % (fullpath, aws_url))
@@ -110,6 +122,7 @@ class s3:
 
 				except Exception, e:
 					logging.error("failed to fetch/store %s (%s) :%s" % (fullpath, aws_url, e))
+					sys.exit()
 
 		return counter
 
@@ -126,9 +139,10 @@ if __name__ == '__main__':
 	parser.add_option('-B', '--bucket', dest='bucket', action='store')
 	parser.add_option('-P', '--public', dest='public', action='store_true', default=False)
 
+	parser.add_option('-p', '--prefix', dest='prefix', action='store', default=None)
 	parser.add_option('-f', '--force', dest='force', action='store_true', default=False)
 	parser.add_option('-d', '--debug', dest='debug', action='store_true', default=False)
-	parser.add_option('-p', '--prefix', dest='prefix', action='store', default=None)
+	parser.add_option('-m', '--modified', dest='modified', action='store_true', default=False)
         
 	options, args = parser.parse_args()
 
@@ -136,7 +150,7 @@ if __name__ == '__main__':
 	cfg.read(options.config)
 
 	s = s3(cfg)
-	c = s.backup(options.directory, options.bucket, public=options.public, force=options.force, debug=options.debug, prefix=options.prefix)
+	c = s.backup(options)
 
 	logging.info('backup completed, %s new files stored' % c)
 	sys.exit()
