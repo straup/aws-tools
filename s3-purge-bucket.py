@@ -53,7 +53,7 @@ if __name__ == '__main__':
 	logging.info('deleted %s keys from %s' % (deleted, options.bucket))
         
 	if options.delete:
-        	logging.info('delete bucket %s' % bucket_name)
+        	logging.info('delete bucket %s' % options.bucket)
 		bucket.delete()
         
 	sys.exit()

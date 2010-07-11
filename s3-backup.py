@@ -89,9 +89,11 @@ class s3:
 
 					if not force:
 						http_conn = httplib.HTTPConnection("s3.amazonaws.com")
-						http_conn.request("HEAD", aws_path)
+						http_conn.request("HEAD", aws_url)
 						rsp = http_conn.getresponse()
 
+						# logging.info('HEAD: %s' % rsp.status)
+                                                        
 						if rsp.status == 200 :
 							logging.info("%s has already been stored" % aws_url)
 							continue
