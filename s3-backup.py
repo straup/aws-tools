@@ -77,7 +77,7 @@ class s3:
 					logging.info('aws url: %s' % aws_url)                                        
 					continue
 
-                                if self.is_cached(options, aws_url):
+                                if self.is_cached(options, fullpath, aws_url):
                                         continue
 
 				try:
@@ -96,7 +96,7 @@ class s3:
 
 		return counter
 
-        def is_cached(self, options, aws_url):
+        def is_cached(self, options, local_path, aws_url):
 
 		if options.force:
                         return False
@@ -108,11 +108,12 @@ class s3:
 			http_conn.request("HEAD", aws_url)
 			rsp = http_conn.getresponse()
 
-			if rsp.status == 200:
+			if rsp.status != 200:
+                        	return False
                         
-				if not options.modified:
-					logging.info("%s has already been stored" % aws_url)
-					return True
+			if not options.modified:
+				logging.info("%s has already been stored" % aws_url)
+				return True
 
                 	last_modified = rsp.getheader('last-modified')
 
@@ -120,12 +121,12 @@ class s3:
 			format = "%a, %d %b %Y %H:%M:%S GMT"
 
 			aws_t = int(time.mktime(time.strptime(last_modified, format)))
-			local_t = os.path.getmtime(fullpath)
+			local_t = os.path.getmtime(local_path)
 
 			logging.info("last modified local:%s remote:%s" % (local_t, aws_t))
 
                         if local_t <= aws_t:
-				logging.info("%s not modified, skipping" % fullpath)
+				logging.info("%s not modified, skipping" % local_path)
 				return True
                         
 		except Exception, e:
