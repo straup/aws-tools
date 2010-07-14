@@ -77,42 +77,13 @@ class s3:
 					logging.info('aws url: %s' % aws_url)                                        
 					continue
 
+                                if self.is_cached(options, aws_url):
+                                        continue
+
 				try:
-
-					# sudo put me in another method...
-					# sudo store/check this stuff in a sqlite database...
-
-					if not options.force:
-
-						http_conn = httplib.HTTPConnection("s3.amazonaws.com")
-						# http_conn.set_debuglevel(3)
-
-						http_conn.request("HEAD", aws_url)
-						rsp = http_conn.getresponse()
-                                                        
-						if rsp.status == 200:
-
-							if not options.modified:
-								logging.info("%s has already been stored" % aws_url)
-								continue
-
-							last_modified = rsp.getheader('last-modified')
-
-							# Last-Modified: Sun, 11 Jul 2010 15:42:30 GMT
-							format = "%a, %d %b %Y %H:%M:%S GMT"
-
-							aws_t = int(time.mktime(time.strptime(last_modified, format)))
-							local_t = os.path.getmtime(fullpath)
-
-							logging.info("last modified local:%s remote:%s" % (local_t, aws_t))
-
-							if local_t <= aws_t:
-								logging.info("%s not modified, skipping" % fullpath)
-								continue
-
-						k = Key(bucket)
-						k.key = shortpath
-						k.set_contents_from_filename(fullpath)
+					k = Key(bucket)
+					k.key = shortpath
+					k.set_contents_from_filename(fullpath)
 
 					if options.public:
 						k.set_acl('public-read')
@@ -121,11 +92,48 @@ class s3:
 					counter += 1
 
 				except Exception, e:
-					logging.error("failed to fetch/store %s (%s) :%s" % (fullpath, aws_url, e))
-					sys.exit()
+					logging.error("failed to store %s (%s) :%s" % (fullpath, aws_url, e))
 
 		return counter
 
+        def is_cached(self, options, aws_url):
+
+		if options.force:
+                        return False
+                
+                try:
+			http_conn = httplib.HTTPConnection("s3.amazonaws.com")
+			# http_conn.set_debuglevel(3)
+
+			http_conn.request("HEAD", aws_url)
+			rsp = http_conn.getresponse()
+
+			if rsp.status == 200:
+                        
+				if not options.modified:
+					logging.info("%s has already been stored" % aws_url)
+					return True
+
+                	last_modified = rsp.getheader('last-modified')
+
+			# Last-Modified: Sun, 11 Jul 2010 15:42:30 GMT
+			format = "%a, %d %b %Y %H:%M:%S GMT"
+
+			aws_t = int(time.mktime(time.strptime(last_modified, format)))
+			local_t = os.path.getmtime(fullpath)
+
+			logging.info("last modified local:%s remote:%s" % (local_t, aws_t))
+
+                        if local_t <= aws_t:
+				logging.info("%s not modified, skipping" % fullpath)
+				return True
+                        
+		except Exception, e:
+                	logging.error('failed to determine cache status for %s: %s' % (aws_url, e))
+
+                return False
+
+                
 if __name__ == '__main__':
 
 	import ConfigParser
