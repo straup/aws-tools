@@ -77,13 +77,16 @@ class s3:
 					logging.info('aws url: %s' % aws_url)                                        
 					continue
 
-                                if self.is_cached(options, fullpath, aws_url):
+                                if self.is_cached(options, bucket, shortpath, fullpath, aws_url):
                                         continue
 
 				try:
 					k = Key(bucket)
 					k.key = shortpath
 					k.set_contents_from_filename(fullpath)
+
+					mtime = os.path.getmtime(fullpath)
+					k.set_metadata('x-mtime', mtime)
 
 					if options.public:
 						k.set_acl('public-read')
@@ -96,31 +99,58 @@ class s3:
 
 		return counter
 
-        def is_cached(self, options, local_path, aws_url):
+        def is_cached(self, options, bucket, shortpath, local_path, aws_url):
 
 		if options.force:
+		        logging.info('not cached (force enabled)')
                         return False
                 
                 try:
-			http_conn = httplib.HTTPConnection("s3.amazonaws.com")
-			# http_conn.set_debuglevel(3)
 
-			http_conn.request("HEAD", aws_url)
-			rsp = http_conn.getresponse()
+			aws_t = None
 
-			if rsp.status != 200:
-                        	return False
+			if options.public:
+				http_conn = httplib.HTTPConnection("s3.amazonaws.com")
+				# http_conn.set_debuglevel(3)
+
+				http_conn.request("HEAD", aws_url)
+				rsp = http_conn.getresponse()
+
+				if rsp.status != 200:
+
+			        	logging.info('HEAD returned %s (%s)' % (rsp.status, aws_url))
+                        		return False
                         
-			if not options.modified:
-				logging.info("%s has already been stored" % aws_url)
-				return True
+				if not options.modified:
+					logging.info("%s has already been stored" % aws_url)
+					return True
 
-                	last_modified = rsp.getheader('last-modified')
+                		last_modified = rsp.getheader('last-modified')
 
-			# Last-Modified: Sun, 11 Jul 2010 15:42:30 GMT
-			format = "%a, %d %b %Y %H:%M:%S GMT"
+				# Last-Modified: Sun, 11 Jul 2010 15:42:30 GMT
+				format = "%a, %d %b %Y %H:%M:%S GMT"
 
-			aws_t = int(time.mktime(time.strptime(last_modified, format)))
+				aws_t = int(time.mktime(time.strptime(last_modified, format)))
+
+			else:
+
+				logging.info('fetch cache info from S3 %s' % shortpath)
+
+				k = Key(bucket)
+				k.key = shortpath
+
+				if not k.exists() :
+					logging.info('key %s does not exist' % shortpath)
+					return False
+
+				aws_t = k.get_metadata('x-mtime')
+
+				if not aws_t:
+
+					k.set_metadata('x-mtime', os.path.getmtime(local_path))
+					logging.info('File exists, but has no mtime. Setting x-mtime and returning true.')
+					return True
+
 			local_t = os.path.getmtime(local_path)
 
 			logging.info("last modified local:%s remote:%s" % (local_t, aws_t))
