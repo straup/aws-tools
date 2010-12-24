@@ -2,6 +2,7 @@
 
 """There are many S3 backup tools. This is mine."""
 
+import sys
 import os
 import os.path
 import httplib
@@ -80,6 +81,8 @@ class s3:
                                 if self.is_cached(options, bucket, shortpath, fullpath, aws_url):
                                         continue
 
+				logging.info("set contents from %s" % fullpath)
+
 				try:
 					k = Key(bucket)
 					k.key = shortpath
@@ -136,29 +139,43 @@ class s3:
 
 				logging.info('fetch cache info from S3 %s' % shortpath)
 
-				k = Key(bucket)
-				k.key = shortpath
+				k = bucket.new_key(shortpath)
+				url = k.generate_url(expires_in=120, method='HEAD')
 
-				if not k.exists() :
-					logging.info('key %s does not exist' % shortpath)
-					return False
+				aws_url = url.replace("https://" + bucket.name + ".s3.amazonaws.com", "")
 
-				aws_t = k.get_metadata('x-mtime')
+				http_conn = httplib.HTTPSConnection(bucket.name + ".s3.amazonaws.com")
+				# http_conn.set_debuglevel(3)
 
-				if not aws_t:
+				http_conn.request("HEAD", aws_url)
+				rsp = http_conn.getresponse()
 
-					k.set_metadata('x-mtime', os.path.getmtime(local_path))
-					logging.info('File exists, but has no mtime. Setting x-mtime and returning true.')
+				if rsp.status != 200:
+
+			        	logging.info('HEAD returned %s (%s)' % (rsp.status, aws_url))
+                        		return False
+                        
+				if not options.modified:
+					logging.info("%s has already been stored" % aws_url)
 					return True
 
-			local_t = os.path.getmtime(local_path)
+                		last_modified = rsp.getheader('last-modified')
+
+				# Last-Modified: Sun, 11 Jul 2010 15:42:30 GMT
+				format = "%a, %d %b %Y %H:%M:%S GMT"
+
+				aws_t = int(time.mktime(time.strptime(last_modified, format)))
+
+			local_t = int(os.path.getmtime(local_path))
 
 			logging.info("last modified local:%s remote:%s" % (local_t, aws_t))
 
                         if local_t <= aws_t:
 				logging.info("%s not modified, skipping" % local_path)
 				return True
-                        
+
+			return False
+
 		except Exception, e:
                 	logging.error('failed to determine cache status for %s: %s' % (aws_url, e))
 
