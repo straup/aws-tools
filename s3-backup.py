@@ -51,7 +51,7 @@ class s3:
 		except Exception, e:
 			logging.error('failed to get on with AWS: %s' % e)
 
-			if debug:
+			if options.debug:
 				logging.info('debugging is enabled, so carrying on anyway...')
 			else:
 				return None
